@@ -1,3 +1,5 @@
 # GetaBot
 Play Youtube on Discord.
-音声再生にはffmpegが必要です。各自ダウンロードして使用してください。
+
+## How to use
+1.Getabot.py,SEフォルダー,ffmpeg をインストールし、同一ディレクトリに配置してください。
