@@ -1,0 +1,2 @@
+py GetaBot.py
+pause
