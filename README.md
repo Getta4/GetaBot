@@ -9,7 +9,7 @@ Play Youtube on Discord.
 
 ### 必要なもの
 
-- GetaBot本体 ([ダウンロード](https://www.python.org/downloads/))
+- GetaBot本体 ([ダウンロード](https://github.com/Getta4/GetaBot/releases))
 
 - Pythonが実行できる環境 ([インストール](https://www.python.org/downloads/))
   - pipが実行できる環境（ライブラリーをインストールしていない場合）
