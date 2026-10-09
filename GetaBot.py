@@ -1,13 +1,13 @@
 ## memo ##
-# yt-dlp関連でエラーが出るときは pip install yt-dlp==2025.01.12 で旧バージョンを入れてください。
+# yt-dlp関連でエラーが出るときは pip install -U yt-dlp で最新バージョンに更新してください。
 # 初回のメッセージ送信はresponse.send_message()、二回目以降はfollowup.send()でおｋ（responseは返り値Noneなので内容を取得したいときはfolowupを使う）
 ## end memo ##
 
 ###インポート＆変数の設定###
 import os #動画ファイルの削除に使用します
 from os import environ
-
 import time #ファイルの削除が確実にできるように使用
+import traceback
 
 import discord #Botの起動に必要なライブラリです
 from discord import app_commands
@@ -15,6 +15,11 @@ from discord.ext import commands
 import asyncio
 import yt_dlp as youtube_dl #YouTube動画のダウンロード/再生に使います。
 from collections import defaultdict, deque #キュー関連に必要
+
+# Botスクリプトのディレクトリを取得し、PATHに追加（同階層のffmpeg.exeやdeno.exeをyt-dlp/discord.pyに認識させるため）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = BASE_DIR + os.pathsep + os.environ.get("PATH", "")
 
 intents = discord.Intents.all()
 intents.voice_states = True
@@ -26,11 +31,11 @@ filename = ""
 ##ytmusic##
 
 # Suppress noise about console usage from errors
-youtube_dl.utils.bug_reports_message = lambda: ''
+youtube_dl.utils.bug_reports_message = lambda *args, **kwargs: ''
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
-    'outtmpl': '[%(id)s]%(title)s.%(ext)s',#'%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'outtmpl': os.path.join(BASE_DIR, '[%(id)s]%(title)s.%(ext)s'),
     'restrictfilenames': True,
     'noplaylist': True,
     'nocheckcertificate': True,
@@ -40,6 +45,7 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
+    'ffmpeg_location': BASE_DIR,
 }
 
 ffmpeg_options = {
@@ -67,8 +73,20 @@ class YTDLSource(discord.PCMVolumeTransformer):
             # take first item from a playlist
             data = data['entries'][0]
 
-        filename = data['url'] if stream else ytdl.prepare_filename(data)#filenameを格納
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        if stream:
+            filename = data['url']
+        else:
+            # 実際に保存されたファイルパスを取得（requested_downloads を優先）
+            if 'requested_downloads' in data and data['requested_downloads']:
+                filename = data['requested_downloads'][0].get('filepath') or ytdl.prepare_filename(data)
+            else:
+                filename = ytdl.prepare_filename(data)
+
+        ffmpeg_executable = os.path.join(BASE_DIR, "ffmpeg.exe")
+        if not os.path.exists(ffmpeg_executable):
+            ffmpeg_executable = "ffmpeg"
+
+        return cls(discord.FFmpegPCMAudio(filename, executable=ffmpeg_executable, **ffmpeg_options), data=data)
 
 ###起動時の処理###
 @client.event
@@ -81,7 +99,7 @@ async def on_ready():
     print('------------------------')
     
     # アクティビティを設定
-    await client.change_presence(status=discord.Status.idle,activity=discord.Activity(state = "結束バンド神CDだから聞け",details = "ぼっち・ざ・ろっく！",type=discord.ActivityType.watching, name="BTR",url = "https://bocchi.rocks/"))
+    await client.change_presence(status=discord.Status.online)
 
     # スラッシュコマンドを同期
     await tree.sync()
@@ -137,14 +155,18 @@ async def join_command(interaction: discord.Interaction):
 async def leave_command(interaction: discord.Interaction):
     global filename
     vc = interaction.guild.voice_client
-    if not filename == "":#前回再生時のファイルを削除
-        if vc.is_playing():
+    if filename != "":#前回再生時のファイルを削除
+        if vc and vc.is_playing():
             vc.stop()
             time.sleep(1)#アクセス制限に引っかかるのでクッション
-        if vc.is_paused():
+        if vc and vc.is_paused():
             vc.stop()
             time.sleep(1)
-        os.remove(filename)
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+            except Exception as e:
+                print(f"ファイル削除エラー: {e}")
         filename = ""
 
     if interaction.guild.voice_client is None:
@@ -160,6 +182,8 @@ async def play_next(interaction, guild_id):
     try:
         global filename
         vc = interaction.guild.voice_client
+        if not vc:
+            return
 
         #botの直前のメッセージを削除
         if guild_id in last_bot_message:
@@ -172,12 +196,16 @@ async def play_next(interaction, guild_id):
         if music_queues[guild_id]:
             next_url = music_queues[guild_id].popleft()
 
-            if not filename == "":#前回再生時のファイルを削除
+            if filename != "":#前回再生時のファイルを削除
                 if vc.is_playing():
                     vc.stop()
                     time.sleep(1)#アクセス制限に引っかかるのでクッション
                 
-                os.remove(filename)
+                if os.path.exists(filename):
+                    try:
+                        os.remove(filename)
+                    except Exception as e:
+                        print(f"ファイル削除エラー: {e}")
                 filename = ""
 
             player = await YTDLSource.from_url(next_url, loop=None)
@@ -187,13 +215,15 @@ async def play_next(interaction, guild_id):
             msg = await interaction.followup.send(f'{player.title} を再生します。\n', view=Play_Control_1(timeout=None))
             last_bot_message[guild_id] = msg
             
-    except:
+    except Exception as e:
+        print(f"play_next エラー: {e}")
+        traceback.print_exc()
         try:
-            await interaction.response.send_message("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
             if music_queues[guild_id]:
                 await play_next(interaction, guild_id)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
             if music_queues[guild_id]:
                 await play_next(interaction, guild_id)
 
@@ -206,8 +236,17 @@ async def play_command(interaction: discord.Interaction, url: str):
             await interaction.response.send_message("ボイスチャンネルに接続していません。", ephemeral=True)
             return
         # URLがYouTubeの動画であるか確認
-        if not url.startswith("https://www.youtube.com/watch") and not url.startswith("https://youtube.com/watch") and not url.startswith("https://youtu.be/"):
-            await interaction.response.send_message("有効なYouTubeのURLを入力してください。\n https;//www,youtube,com/watch/～ (www.なしでもOK)か https;//youtu,be のみが使用できます。", ephemeral=True)
+        valid_prefixes = (
+            "https://www.youtube.com/watch",
+            "https://youtube.com/watch",
+            "https://m.youtube.com/watch",
+            "https://music.youtube.com/watch",
+            "https://youtu.be/",
+            "https://www.youtube.com/shorts/",
+            "https://youtube.com/shorts/",
+        )
+        if not any(url.startswith(p) for p in valid_prefixes):
+            await interaction.response.send_message("有効なYouTubeのURLを入力してください。\n(例: https://www.youtube.com/watch?v=... / https://youtu.be/... / https://m.youtube.com/... など)", ephemeral=True)
             return
         
         global filename
@@ -224,13 +263,15 @@ async def play_command(interaction: discord.Interaction, url: str):
             await play_next(interaction, guild_id)
     except IndexError:
         await interaction.followup.send("Error!\nurlに入力された値が異常値です。もう一度リンクを確認してください。", ephemeral=True)
-    except:
+    except Exception as e:
+        print(f"play_command エラー: {e}")
+        traceback.print_exc()
         try:
-            await interaction.response.send_message("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
             if music_queues[guild_id]:
                 await play_next(interaction, guild_id)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n動画が正常に取得できませんでした。(年齢制限のかかっている動画は取得できないので、別の動画を指定してください。）\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
             if music_queues[guild_id]:
                 await play_next(interaction, guild_id)
 
@@ -247,9 +288,9 @@ async def show_queue(interaction: discord.Interaction):
             await interaction.response.send_message("現在キューは空です。", ephemeral=True)
     except:
         try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
 
 # 再生再開
 @discord.app_commands.guild_only
@@ -281,9 +322,9 @@ async def replay_command(interaction: discord.Interaction):
             await interaction.response.send_message("何も再生していません。", ephemeral=True)
     except:
         try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
 
 # 再生停止
 @discord.app_commands.guild_only
@@ -310,19 +351,24 @@ async def stop_command(interaction: discord.Interaction):
             vc.stop()
             time.sleep(1)#アクセス制限に引っかかるのでクッション
             global filename
-            if not filename == "":#再生したファイルを削除
-                
-                os.remove(filename)
+            if filename != "":#再生したファイルを削除
+                if os.path.exists(filename):
+                    try:
+                        os.remove(filename)
+                    except Exception as e:
+                        print(f"ファイル削除エラー: {e}")
                 filename = ""
             
             await interaction.response.defer()
             await interaction.followup.send("再生を停止しました。",ephemeral=True)
 
-    except:
+    except Exception as e:
+        print(f"stop_command エラー: {e}")
+        traceback.print_exc()
         try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
 # 一時停止
 @discord.app_commands.guild_only
 @tree.command(name="pause", description="再生を一時停止します。")
@@ -352,51 +398,9 @@ async def pause_command(interaction: discord.Interaction):
             last_bot_message[guild_id] = msg #メッセージを格納し、次回コマンド実行時に削除
     except:
         try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
-
-# ﾇﾝ
-@discord.app_commands.guild_only
-@tree.command(name="nun", description="ﾇﾝ")
-async def nun_command(interaction: discord.Interaction):
-    try:
-        if interaction.guild.voice_client is None:
-            await interaction.response.send_message("接続していません。", ephemeral=True)
-            return
-        vc = interaction.guild.voice_client
-        if vc.is_paused():
-            vc.resume()
-            await interaction.response.send_message("再生を再開しました。", ephemeral=True)
-        else:
-            vc.play(discord.FFmpegPCMAudio("SE/nun.mp3"), bitrate=256)
-            await interaction.response.send_message("ﾇﾝ", ephemeral=True)
-    except:
-        try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
-        except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
-
-# ﾉﾁ!
-@discord.app_commands.guild_only
-@tree.command(name="noti", description="ﾉﾁ!")
-async def noti_command(interaction: discord.Interaction):
-    try:
-        if interaction.guild.voice_client is None:
-            await interaction.response.send_message("接続していません。", ephemeral=True)
-            return
-        vc = interaction.guild.voice_client
-        if vc.is_paused():
-            vc.resume()
-            await interaction.response.send_message("再生を再開しました。", ephemeral=True)
-        else:
-            vc.play(discord.FFmpegPCMAudio("SE/noti.mp3"), bitrate=256)
-            await interaction.response.send_message("ﾉﾁ!✋️", ephemeral=True)
-    except:
-        try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
-        except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
 
 @tree.command(name='hello', description='こんにちは！')
 async def hello_command(interaction: discord.Interaction):
@@ -424,9 +428,10 @@ async def say_command(interaction: discord.Interaction,text:str = None,picture:d
             await interaction.response.send_message(text,embed=embed)
     except:
         try:
-            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.response.send_message("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
         except discord.errors.InteractionResponded:
-            await interaction.followup.send("Error!\n何度もエラーが発生する場合は 開発者 まで連絡をお願いします。", ephemeral=True)
+            await interaction.followup.send("Error!\n何度もエラーが発生する場合は <@957152000313786459> まで連絡をお願いします。", ephemeral=True)
 
 ###Commands End###
-client.run("YourTokenHere") #Botのトークンを入力してください
+if __name__ == '__main__':
+    client.run("Your token here")

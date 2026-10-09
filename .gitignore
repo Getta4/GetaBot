@@ -1,3 +1,17 @@
+# 動作に必要なファイル
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+deno.exe
+cookies.txt
+log/
+__pycache__/
+*.webm
+*.m4a
+*.mp3
+*.opus
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

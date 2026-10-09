@@ -5,8 +5,7 @@ Play Youtube on Discord.
 ![HakaTime](https://hackatime-badge.hackclub.com/U091PJDHHQV/DiscordBot
 )
 
-## How to use 
-( English explanation below )
+## How to use
 
 ### 必要なもの
 
@@ -17,11 +16,15 @@ Play Youtube on Discord.
 
 - ffmpeg（[インストール](https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest)）
 
+- deno（[インストール](https://deno.land/)）
+
 - BOT TOKEN（[ここ](https://discord.com/developers/applications)からアプリケーションを作成し、BOTタブからTOKENを取得してください。
+
+- cookies.txt（年齢制限が必要な動画を再生する場合。取得は各自で行ってください）
 
 ### 手順
 
-1. Getabot.py , SEフォルダー , [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest) をダウンロード・インストールし、同一ディレクトリに配置してください。  
+1. Getabot.py , SEフォルダー , [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest) , [deno](https://deno.land/)をダウンロード・インストールし、同一ディレクトリに配置してください。  
 (ffmpegはbinフォルダー内のexeファイルのみ配置で大丈夫です。)  
 
 #### ディレクトリ
@@ -30,37 +33,46 @@ Play Youtube on Discord.
 /
 |- gatabot.py
 |
-|- SE 
-|  |-nun.mp3
-|  |-noti.mp3
+|- ffmpeg.exe
+|- ffprove.exe
 |
-|-ffmpeg.exe
-|-ffplay.exe
-|-ffprove.exe
+|- deno.exe
 |
-|-runbot.bat
+|- runbot.bat
+|
+|- (Cookies.txt)
 ```
 
-2. 以下のライブラリーをインストールしてください。  
+1. 以下のライブラリーをインストールしてください。  
 (インストール済みの場合はインストール不要です。3に進んでください。)
 
 ```python
-pip install discord
+pip install -U discord
 ```
 
 ```python
-pip install discord.py[voice]
+pip install -U discord.py[voice]
 ```
 
 ```python
-pip install yt-dlp==2025.01.12
+pip install -U "discord.py[voice]" davey
 ```
 
 ```python
-pip install ffmpeg-python
+pip install -U yt-dlp
+```
+
+```python
+pip install -U ffmpeg-python
 ```  
 
-3. トークンを入力して実行
+Python3.13を使用している場合
+
+```python
+pip install -U audioop-lts
+```
+
+1. トークンを入力して実行
 
 ```Python
 ～～～～～　省略　～～～～～
@@ -68,7 +80,26 @@ pip install ffmpeg-python
 client.run("YourTokenHere") ←ここに取得したTOKENを貼り付けてください。
 ```
 
-4. **Enjoy!!**
+コンソールに
+
+```Bash
+Botは正常に起動しました！
+User name : [BOTの名前]
+User ID : [BOTのID]
+Discord.py Version : [バージョン]
+```
+
+上のような表示がでれば正常に起動が完了できています。
+
+1. BOTを任意のサーバーに参加させる  
+
+[Developers potal](https://discord.com/developers/applications)からBOTを参加させるためのOAuth2を取得し、サーバーに参加させてください。
+
+![オンライン](readme/image-2.png)
+
+正常に起動し参加ができていれば、上記のようにオンライン状態でBOTがサーバーリストにあるはずです。
+
+> ステータスは起動時の処理の`await client.change_presence()`の引数を変更することで変更できます。詳しくは[こちら](https://discordpy.readthedocs.io/ja/stable/api.html#discord.Client.change_presence)
 
 ## Commands
 
@@ -95,116 +126,16 @@ Getabotのコマンドはアプリケーションコマンドです。そのた�
 一時停止中の曲を再生再開します。
 
 ### stop
+
 再生中の曲を再生停止します。  
 
-## Support
-
-[![email](https://img.shields.io/badge/mail@gtnk.xyz-272727?style=flat&logo=maildotru&logoColor=fff&labelColor=%234285F4&color=383838&link=https%3A%2F%2FGetan9.com%2FWeb%2F)](mailto:mail@gtnk.xyz)  
-[![X](https://img.shields.io/badge/%40Get4__-272727?style=flat&logo=X&logoColor=fff&labelColor=060708&color=383838&link=https%3A%2F%2Fx.com%2FGet4_)](https://twitter.com/@Get4_)
-[![Discord](https://img.shields.io/badge/get4__-272727?style=flat&logo=Discord&logoColor=fff&labelColor=%235865F2&color=383838)](https://discord.com/app/)
-
----
-
-# English
-
-## How to Use
-
-### Prerequisites
-
-  * **GetaBot Core** ([Download](https://www.python.org/downloads/))
-  
-  * **Python Environment** ([Install](https://www.python.org/downloads/))
-  
-      * `pip` executable environment (if you haven't installed libraries yet)
-  
-  * **FFmpeg** ([Install](https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest))
-  
-  * **BOT TOKEN** (Create an application [here](https://discord.com/developers/applications) and get the TOKEN from the BOT tab.)
-
-### Steps
-
-1.  Download and install getabot.py, the SE folder, and [FFmpeg](https://github.com/BtbN/FFmpeg-Builds/releases/tag/latest), then place them in the same directory.
-    (For FFmpeg, only the .exe files within the bin folder are needed.)
-
-    #### Directory Structure
-
-    ```
-
-    /
-    |- getabot.py
-    |
-    |- SE
-    |  |- nun.mp3
-    |  |- noti.mp3
-    |
-    |- ffmpeg.exe
-    |- ffplay.exe
-    |- ffprobe.exe
-    |
-    |- runbot.bat
-    
-    ```
-
-2.  Install the following libraries.
-    (If already installed, skip this step and proceed to step 3.)
-
-    ```python
-    pip install discord
-    ```
-
-    ```python
-    pip install discord.py[voice]
-    ```
-
-    ```python
-    pip install yt-dlp==2025.01.12
-    ```
-
-    ```python
-    pip install ffmpeg-python
-    ```
-
-3.  Enter your token and run the bot.
-
-    ```python
-    ~~~~~~~~~ (Omitted) ~~~~~~~~~
-    ###Commands End###
-    client.run("YourTokenHere") # Paste your obtained TOKEN here.
-    ```
-
-4.  **Enjoy!**
-
------
-
-## Commands
-
-GetaBot commands are application commands. Type `/` to see command suggestions.
-
-### join
-
-Makes the bot join the voice channel that the command executor is currently in.
-
-### leave
-
-Makes the bot leave the voice channel.
-
-### play [YouTube URL]
-
-Plays the song from the provided YouTube URL.
-
-### pause
-
-Pauses the currently playing song.
-
-### replay
-
-Resumes a paused song.
-
-### stop
-
-Stops the currently playing song.
+> 音声再生中にボイスチャンネルにコントロールが表示されるので、pauseなどのコマンドを入力しなくても再生・一時停止などの操作ができます。
+![再生](readme/image.png)  
+![一時停止](readme/image-1.png)
 
 ## Support
+
+なにか不具合・ご要望があれば、メール・ダイレクトメッセージでご連絡ください。
 
 [![email](https://img.shields.io/badge/mail@gtnk.xyz-272727?style=flat&logo=maildotru&logoColor=fff&labelColor=%234285F4&color=383838&link=https%3A%2F%2FGetan9.com%2FWeb%2F)](mailto:mail@gtnk.xyz)  
 [![X](https://img.shields.io/badge/%40Get4__-272727?style=flat&logo=X&logoColor=fff&labelColor=060708&color=383838&link=https%3A%2F%2Fx.com%2FGet4_)](https://twitter.com/@Get4_)
